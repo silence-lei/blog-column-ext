@@ -31,22 +31,71 @@
         });
     };
 
+    async function getColumnArticles(columnId, blogUsername, articleCount) {
+        const pageSize = 100; // 每页最大100条
+        const totalPages = Math.ceil(articleCount / pageSize);
+        let allArticles = [];
+        
+        try {
+            // 并发请求所有页面
+            const promises = Array.from({ length: totalPages }, (_, i) => {
+                const page = i + 1;
+                return fetch(`https://blog.csdn.net/phoenix/web/v1/column/article/list?columnId=${columnId}&blogUsername=${blogUsername}&page=${page}&pageSize=${pageSize}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.code === 200) {
+                            return data.data.map(article => ({
+                                url: article.url,
+                                title: article.title
+                            }));
+                        }
+                        throw new Error(`获取专栏文章失败: ${data.message}`);
+                    });
+            });
+    
+            const results = await Promise.all(promises);
+            allArticles = results.flat();
+            
+        } catch (error) {
+            console.error('获取专栏文章失败:', error);
+        }
+        console.log('allArticles length:', allArticles.length);
+        return allArticles;
+    } 
+
     function getColumnInfo() {
+        // const columnItems = $$('#item-target');
+        // console.log('columnItems: ', columnItems);
         const columnInfoListDom = $$('#blogColumnPayAdvert .column-group-item');
-        const promises = Array.from(columnInfoListDom).map(element => {
+        const promises = Array.from(columnInfoListDom).map(async element => {
             const columnUrl = element.querySelector('.item-target').href;
             const columnTitle = element.querySelector('.item-target').title;
+            const columnInfo = element.querySelector('.item-m').querySelectorAll('span');
+            let articleCount = 0;
+            columnInfo.forEach(info => {
+                if (info.innerText.includes('篇文章')) {
+                    articleCount = info.innerText.replace(' 篇文章', '');
+                }
+            })
+            console.log('articleCount: ', articleCount);
+            // 从columnUrl获取blogUserName和columnId
+            const urlInfo = parseColumnUrl(columnUrl);
+            if (!urlInfo) {
+                console.error('无法解析专栏 URL:', columnUrl);
+                return null;
+            }
+
+            const { blogUsername, columnId } = urlInfo;
+            console.log('解析结果:', { blogUsername, columnId });
+            
             // 访问专栏地址，获取专栏所有文章列表
-            return fetch(columnUrl)
-                .then(res => res.text())
-                .then(data => {
-                    const articles = parseArticlesFromHTML(data);
-                    return { columnTitle, articles };
-                })
-                .catch(e => {
-                    console.error('Error fetching column articles:', e);
-                    return null;  // 在错误发生时返回null，以确保数组的长度不变
-                });
+            try {
+                const articles = await getColumnArticles(columnId, blogUsername, articleCount);
+                return { columnTitle, articles };
+            } catch (error) {
+                console.error('Error fetching column articles:', error);
+                return null;
+            }
         });
     
         return Promise.all(promises).then(results => {
@@ -54,6 +103,21 @@
         });
     }
 
+    function parseColumnUrl(url) {
+        // 使用正则表达式匹配 URL 中的用户名和专栏 ID
+        const regex = /blog\.csdn\.net\/([^\/]+)\/category_(\d+)\.html/;
+        const match = url.match(regex);
+        
+        if (match) {
+            return {
+                blogUsername: match[1],  // 第一个捕获组是用户名
+                columnId: match[2]       // 第二个捕获组是专栏 ID
+            };
+        }
+        
+        return null;
+    }
+    
 
     function parseArticlesFromHTML(html) {
         const parser = new DOMParser();
@@ -79,15 +143,6 @@
         return result;
     }
 
-    function processArticles(columnTitle, articles) {
-        // 处理文章信息，添加锚点链接
-        // 这里需要根据实际需求来实现
-        console.log(columnTitle);
-        articles.forEach((article) => {
-            console.log(article);
-        });
-    }
-
     function buildMenu(columnInfo) {
         const currentUrl = window.location.href;
         const menu = document.createElement('div');
@@ -96,12 +151,23 @@
         // 添加专栏选择器
         const columnSelector = document.createElement('select');
         columnSelector.classList.add('column-selector');
+        
+        // 找到当前文章所在的专栏
+        let currentColumnIndex = 0;
         columnInfo.forEach((column, index) => {
             const option = document.createElement('option');
             option.value = index;
             option.textContent = column.columnTitle;
             columnSelector.appendChild(option);
+            
+            // 检查当前文章是否在这个专栏中
+            if (column.articles.some(article => article.url === currentUrl)) {
+                currentColumnIndex = index;
+            }
         });
+
+        // 设置当前专栏为默认选中
+        columnSelector.value = currentColumnIndex;
 
         // 添加切换事件
         columnSelector.addEventListener('change', (e) => {
@@ -111,37 +177,53 @@
 
         menu.appendChild(columnSelector);
 
-        // 默认显示第一个专栏的文章
-        if (columnInfo.length > 0) {
-            showColumnArticles(columnInfo[0], menu);
-        }
-
+        // 显示当前专栏的文章
+        showColumnArticles(columnInfo[currentColumnIndex], menu);
+        
         return menu;
     }
 
     function showColumnArticles(column, menu) {
+        const currentUrl = window.location.href;
+    
         // 移除现有的文章列表
         const existingList = menu.querySelector('.article-list');
         if (existingList) {
             existingList.remove();
         }
-    
+
         const articleList = document.createElement('ul');
         articleList.classList.add('article-list');
-    
+
+        let activeArticleElement = null;
+
         column.articles.forEach(article => {
             const articleItem = document.createElement('li');
             const articleLink = document.createElement('a');
             articleLink.href = article.url;
             articleLink.textContent = article.title;
-            if (article.url === window.location.href) {
+            
+            if (article.url === currentUrl) {
                 articleItem.classList.add('column-active');
+                activeArticleElement = articleItem;
             }
+            
             articleItem.appendChild(articleLink);
             articleList.appendChild(articleItem);
         });
-    
+
         menu.appendChild(articleList);
+
+        // 滚动到当前文章
+        if (activeArticleElement) {
+            // 等待 DOM 更新完成后再滚动
+            setTimeout(() => {
+                activeArticleElement.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center'
+                });
+            }, 100);
+        }
     }
 
     function addMenuToSidebar(menu) {
