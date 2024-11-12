@@ -3,7 +3,8 @@
 // @description  Optimize CSDN columns by adding a side menu with a list of all articles in the current column.
 // @version      1.0
 // @author       Silence
-// @match        *://blog.csdn.net/*/article/details/*
+// @match        *://blog.csdn.net/*/article/*
+// @match        *://*.blog.csdn.net/article/*
 // @grant        GM_addStyle
 // @run-at       document-start
 // ==/UserScript==
@@ -28,18 +29,6 @@
             // 步骤 4: 实现点击切换文章
             addClickEventToMenu(menu);
         });
-
-        // // 步骤 1: 获取当前文章所属的专栏信息
-        // const columnInfo = getColumnInfo();
-
-        // // 步骤 2: 构建专栏和文章的目录结构
-        // const menu = buildMenu(columnInfo);
-
-        // // 步骤 3: 将目录添加到边侧
-        // addMenuToSidebar(menu);
-
-        // // 步骤 4: 实现点击切换文章
-        // addClickEventToMenu(menu);
     };
 
     function getColumnInfo() {
@@ -103,93 +92,143 @@
         const currentUrl = window.location.href;
         const menu = document.createElement('div');
         menu.classList.add('column-menu');
-        console.log('columnInfo: ', columnInfo);
-        console.log('listLength: ', columnInfo.length);
-        columnInfo.forEach(column => {
-            const columnTitle = column.columnTitle;
-            const articles = column.articles;
-
-            console.log('title: ', columnTitle);
-
-            const columnHeader = document.createElement('h3');
-            columnHeader.textContent = columnTitle;
-            menu.appendChild(columnHeader);
-
-            const articleList = document.createElement('ul');
-            articleList.classList.add('article-list');
-
-            articles.forEach(article => {
-                const articleItem = document.createElement('li');
-                const articleLink = document.createElement('a');
-                articleLink.href = article.url;
-                articleLink.textContent = article.title;
-                if (article.url === currentUrl) {
-                    // 文章链接与当前页面URL匹配，添加高亮样式
-                    articleItem.classList.add('column-active');
-                }
-                articleItem.appendChild(articleLink);
-                articleList.appendChild(articleItem);
-            });
-
-            menu.appendChild(articleList);
+        
+        // 添加专栏选择器
+        const columnSelector = document.createElement('select');
+        columnSelector.classList.add('column-selector');
+        columnInfo.forEach((column, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = column.columnTitle;
+            columnSelector.appendChild(option);
         });
-        console.log('build menu finished.')
+
+        // 添加切换事件
+        columnSelector.addEventListener('change', (e) => {
+            const selectedIndex = e.target.value;
+            showColumnArticles(columnInfo[selectedIndex], menu);
+        });
+
+        menu.appendChild(columnSelector);
+
+        // 默认显示第一个专栏的文章
+        if (columnInfo.length > 0) {
+            showColumnArticles(columnInfo[0], menu);
+        }
 
         return menu;
     }
 
+    function showColumnArticles(column, menu) {
+        // 移除现有的文章列表
+        const existingList = menu.querySelector('.article-list');
+        if (existingList) {
+            existingList.remove();
+        }
+    
+        const articleList = document.createElement('ul');
+        articleList.classList.add('article-list');
+    
+        column.articles.forEach(article => {
+            const articleItem = document.createElement('li');
+            const articleLink = document.createElement('a');
+            articleLink.href = article.url;
+            articleLink.textContent = article.title;
+            if (article.url === window.location.href) {
+                articleItem.classList.add('column-active');
+            }
+            articleItem.appendChild(articleLink);
+            articleList.appendChild(articleItem);
+        });
+    
+        menu.appendChild(articleList);
+    }
+
     function addMenuToSidebar(menu) {
-        console.log(menu);
-        // 创建一个侧边栏容器
-        // const sidebar = document.createElement('aside');
         const sidebar = document.createElement('div');
-        sidebar.id = 'custom-sidebar'; // 添加一个ID以便于样式定位
+        sidebar.id = 'custom-sidebar';
         sidebar.classList.add('column-menu-sidebar');
         
-        // 获取toolbarBox的高度，然后设置sidebar上边距
-        //const toolbarBoxHeight = document.querySelector('.toolbarBox').offsetHeight;
-        //sidebar.style.marginTop = `${toolbarBoxHeight}px`; // 设置上边距
-
-        // 设置侧边栏样式，可以根据需要调整
-        sidebar.style.position = 'fixed';
-        sidebar.style.left = '0'; // 放置在页面左侧
-        sidebar.style.right = 'auto'; // 重置右侧定位
-        sidebar.style.width = '250px'; // 设置宽度
-        sidebar.style.height = '100%'; // 设置高度为全屏
-        sidebar.style.backgroundColor = '#f5f5f5'; // 设置背景颜色
-        sidebar.style.overflowY = 'auto'; // 允许纵向滚动
-        sidebar.style.padding = '10px'; // 设置内边距
-        sidebar.style.boxShadow = '-2px 0 5px rgba(0,0,0,0.1)'; // 添加阴影效果
-        sidebar.style.zIndex = '9999'; // 确保侧边栏在最上层
-
+        // 添加标题栏和收起按钮
+        const titleBar = document.createElement('div');
+        titleBar.classList.add('sidebar-title');
+        
+        // 添加标题文本和收起按钮的容器
+        const titleContent = document.createElement('div');
+        titleContent.classList.add('title-content');
+        titleContent.textContent = '专栏文章';
+        
+        const collapseBtn = document.createElement('button');
+        collapseBtn.classList.add('collapse-btn');
+        collapseBtn.innerHTML = '&times;'; // × 符号
+        collapseBtn.title = '收起侧边栏';
+        
+        titleBar.appendChild(titleContent);
+        titleBar.appendChild(collapseBtn);
+        sidebar.appendChild(titleBar);
         sidebar.appendChild(menu);
-
-        // 将侧边栏添加到body元素中
-        // document.body.appendChild(sidebar);
-        // 将侧边栏添加到toolbarBox后面
-        // let toolbarBox = document.querySelector('#toolbarBox');
-        let blogContentBox = document.querySelector('.blog-content-box');
-        // let main = document.querySelector('#mainBox main')
+        
+        // 添加收起后的展开按钮
+        const expandBtn = document.createElement('div');
+        expandBtn.id = 'sidebar-expand-btn';
+        expandBtn.title = '展开侧边栏';
+        expandBtn.style.display = 'none';
+        document.body.appendChild(expandBtn);
+        
+        // 添加收起/展开事件
+        collapseBtn.addEventListener('click', () => toggleSidebar(false));
+        expandBtn.addEventListener('click', () => toggleSidebar(true));
+        
+        const blogContentBox = document.querySelector('.blog-content-box');
         if (blogContentBox) {
-            // 将侧边栏添加到mainBox后面
             blogContentBox.insertAdjacentElement('beforeBegin', sidebar);
         } else {
             document.body.insertBefore(sidebar, document.body.firstChild);
         }
-        // document.body.insertBefore(sidebar, document.body.firstChild); // 将侧边栏添加到body元素的第一个子元素之前
-        adjustMainContentStyle();
         
-
-        console.log('add menu to sidebar success.')
+        adjustMainContentStyle(true);
     }
 
-    function adjustMainContentStyle() {
+    function toggleSidebar(show) {
+        const sidebar = document.querySelector('#custom-sidebar');
+        const expandBtn = document.querySelector('#sidebar-expand-btn');
+        
+        if (show) {
+            sidebar.style.transform = 'translateX(0)';
+            expandBtn.style.display = 'none';
+            adjustMainContentStyle(true);
+        } else {
+            sidebar.style.transform = 'translateX(-250px)';
+            expandBtn.style.display = 'block';
+            adjustMainContentStyle(false);
+        }
+    }
+
+    function adjustMainContentStyle(isExpanded) {
         const mainContent = document.querySelector('.blog-content-box');
         if (mainContent) {
-            mainContent.style.marginLeft = '250px'; // 调整主内容的margin-left，以留出侧边栏的空间
-            mainContent.style.marginRight = '0'; // 重置主内容的margin-right
-        } else {
-            console.warn('Cannot find .article_content element.');
+            const margin = isExpanded ? '250px' : '0';
+            
+            mainContent.style.marginLeft = margin;
+            mainContent.style.marginRight = '0';
+    
+            // 调整顶部工具栏
+            const topToolbarBox = document.querySelector('#toolbarBox');
+            if (topToolbarBox) {
+                topToolbarBox.style.marginLeft = margin;
+            }
+            
+            // 调整底部工具栏
+            const bottomToolbox = document.querySelector('#toolBarBox');
+            if (bottomToolbox) {
+                bottomToolbox.style.marginLeft = margin;
+            }
+    
+            // 调整评论区
+            const footer = document.querySelector('#pcCommentBox');
+            if (footer) {
+                footer.style.marginLeft = margin;
+            }
         }
     }
 
@@ -205,45 +244,192 @@
         });
     }
 
-    // 在脚本末尾添加样式，可以使用GM_addStyle如果支持
-    const customStyle = `
+// 更新样式
+const customStyle = `
     #custom-sidebar {
-        /* 这里可以添加更多的自定义样式 */
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 250px;
+        height: 100vh;
+        background-color: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        z-index: 999;
+        overflow-y: auto;
+        padding: 0;
+        border-right: 1px solid #eee;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        transition: transform 0.3s ease;
     }
-    .column-menu {
-        /* 菜单样式 */
+
+    .sidebar-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        font-size: 16px;
+        font-weight: bold;
+        border-bottom: 1px solid #eee;
+        background-color: #f8f9fa;
     }
-    .column-menu h3 {
-        /* 标题样式 */
-        margin-top: 0;
-        padding: 10px;
-        background-color: #eee;
+
+    .title-content {
+        flex: 1;
     }
+
+    .collapse-btn {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0 5px;
+        transition: color 0.2s;
+    }
+
+    .collapse-btn:hover {
+        color: #1890ff;
+    }
+
+    #sidebar-expand-btn {
+        position: fixed;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 20px;
+        height: 50px;
+        background-color: #fff;
+        box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+        cursor: pointer;
+        z-index: 999;
+        border-radius: 0 4px 4px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s;
+        text-align: center;
+        line-height: 50px;
+    }
+
+    #sidebar-expand-btn:hover {
+        background-color: #f0f0f0;
+    }
+
+    #sidebar-expand-btn::after {
+        content: '›';
+        font-size: 20px;
+        color: #666;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        line-height: 1;
+    }
+
+    .column-selector {
+        width: 90%;
+        margin: 10px auto;
+        display: block;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        background-color: #fff;
+    }
+
+    .column-selector:hover {
+        border-color: #40a9ff;
+    }
+
+    .column-selector:focus {
+        outline: none;
+        border-color: #1890ff;
+        box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
+    }
+
     .article-list {
-        /* 文章列表样式 */
         list-style: none;
         padding: 0;
         margin: 0;
     }
+
     .article-list li {
-        /* 列表项样式 */
-        padding: 5px 10px;
+        padding: 0;
+        border-bottom: 1px solid #f0f0f0;
     }
-    .article-list li:hover {
-        /* 鼠标悬停样式 */
-        background-color: #e0e0e0;
-        cursor: pointer;
-    }
-    .article-list a {
-        /* 链接样式 */
+
+    .article-list li a {
+        display: block;
+        padding: 12px 15px;
+        color: #333;
         text-decoration: none;
-        color: inherit; /* 继承父元素颜色 */
+        font-size: 14px;
+        line-height: 1.5;
+        transition: all 0.2s;
     }
+
+    .article-list li:hover {
+        background-color: #f8f9fa;
+    }
+
+    .article-list li:hover a {
+        color: #1890ff;
+    }
+
     .column-active {
-        background-color: #ffcc00; /* 高亮颜色 */
-        font-weight: bold; /* 字体加粗 */
+        background-color: #e6f7ff;
     }
-    `;
+
+    .column-active a {
+        color: #1890ff !important;
+        font-weight: 500;
+    }
+
+    /* 滚动条样式 */
+    #custom-sidebar::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    #custom-sidebar::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    #custom-sidebar::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 3px;
+    }
+
+    #custom-sidebar::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+
+    /* 响应式设计 */
+    @media (max-width: 1200px) {
+        #custom-sidebar {
+            width: 200px;
+        }
+        
+        .blog-content-box {
+            margin-left: 200px !important;
+        }
+        
+        #sidebar-expand-btn {
+            width: 16px;
+        }
+        
+        .column-selector {
+            width: 85%;
+        }
+    }
+
+    /* 动画过渡效果 */
+    .blog-content-box,
+    #toolbarBox,
+    #toolBarBox,
+    #pcCommentBox {
+        transition: margin-left 0.3s ease;
+    }
+`;
 
     // 如果支持GM_addStyle，则使用它来添加样式
     if (typeof GM_addStyle !== 'undefined') {
