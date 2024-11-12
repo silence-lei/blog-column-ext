@@ -231,22 +231,47 @@
         sidebar.id = 'custom-sidebar';
         sidebar.classList.add('column-menu-sidebar');
         
-        // 添加标题栏和收起按钮
+        // 添加标题栏
         const titleBar = document.createElement('div');
         titleBar.classList.add('sidebar-title');
         
-        // 添加标题文本和收起按钮的容器
+        // 添加标题文本容器
         const titleContent = document.createElement('div');
         titleContent.classList.add('title-content');
         titleContent.textContent = '专栏文章';
         
+        // 添加按钮容器
+        const buttonContainer = document.createElement('div');
+        buttonContainer.classList.add('title-buttons');
+        
+        // 添加定位按钮
+        const locateBtn = document.createElement('button');
+        locateBtn.classList.add('sidebar-btn', 'locate-btn');
+        locateBtn.innerHTML = '&#x1F50D;'; // 放大镜图标
+        locateBtn.title = '定位当前文章';
+        locateBtn.onclick = () => {
+            const activeArticle = sidebar.querySelector('.column-active');
+            if (activeArticle) {
+                activeArticle.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+        };
+        
+        // 添加收起按钮
         const collapseBtn = document.createElement('button');
-        collapseBtn.classList.add('collapse-btn');
+        collapseBtn.classList.add('sidebar-btn', 'collapse-btn');
         collapseBtn.innerHTML = '&times;'; // × 符号
         collapseBtn.title = '收起侧边栏';
         
+        // 组装按钮容器
+        buttonContainer.appendChild(locateBtn);
+        buttonContainer.appendChild(collapseBtn);
+        
+        // 组装标题栏
         titleBar.appendChild(titleContent);
-        titleBar.appendChild(collapseBtn);
+        titleBar.appendChild(buttonContainer);
         sidebar.appendChild(titleBar);
         sidebar.appendChild(menu);
         
@@ -261,6 +286,7 @@
         collapseBtn.addEventListener('click', () => toggleSidebar(false));
         expandBtn.addEventListener('click', () => toggleSidebar(true));
         
+        // 插入侧边栏到页面
         const blogContentBox = document.querySelector('.blog-content-box');
         if (blogContentBox) {
             blogContentBox.insertAdjacentElement('beforeBegin', sidebar);
@@ -348,11 +374,42 @@ const customStyle = `
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 15px;
+        padding: 12px 15px;
         font-size: 16px;
         font-weight: bold;
         border-bottom: 1px solid #eee;
         background-color: #f8f9fa;
+    }
+
+    .title-buttons {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .sidebar-btn {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+    }
+
+    .sidebar-btn:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+        color: #1890ff;
+    }
+
+    .locate-btn {
+        font-size: 14px;
     }
 
     .title-content {
@@ -360,13 +417,18 @@ const customStyle = `
     }
 
     .collapse-btn {
-        background: none;
-        border: none;
-        color: #666;
-        font-size: 20px;
-        cursor: pointer;
-        padding: 0 5px;
-        transition: color 0.2s;
+        //background: none;
+        //border: none;
+        //color: #666;
+        font-size: 18px;
+        //cursor: pointer;
+        //padding: 0 5px;
+        //transition: color 0.2s;
+    }
+
+     /* 添加按钮激活状态样式 */
+    .sidebar-btn:active {
+        transform: scale(0.95);
     }
 
     .collapse-btn:hover {
