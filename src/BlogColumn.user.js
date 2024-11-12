@@ -159,9 +159,8 @@
             option.value = index;
             option.textContent = column.columnTitle;
             columnSelector.appendChild(option);
-            
             // 检查当前文章是否在这个专栏中
-            if (column.articles.some(article => article.url === currentUrl)) {
+            if (column.articles.some(article => article.url.split('/').pop() === currentUrl.split('/').pop())) {
                 currentColumnIndex = index;
             }
         });
@@ -203,7 +202,7 @@
             articleLink.href = article.url;
             articleLink.textContent = article.title;
             
-            if (article.url === currentUrl) {
+            if (article.url.split('/').pop() === currentUrl.split('/').pop()) {
                 articleItem.classList.add('column-active');
                 activeArticleElement = articleItem;
             }
