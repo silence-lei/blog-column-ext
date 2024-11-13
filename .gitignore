@@ -1,0 +1,21 @@
+# VSCode
+.vscode
+
+# IDE - VSCode
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# Editor - Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Editor - Atom
+.atom
+
+# Editor - Vim
+.vimrc
+*.swp
+*.swo
+.vscode/settings.json

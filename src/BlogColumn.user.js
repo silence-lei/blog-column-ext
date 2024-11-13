@@ -160,7 +160,7 @@
             option.textContent = column.columnTitle;
             columnSelector.appendChild(option);
             // 检查当前文章是否在这个专栏中
-            if (column.articles.some(article => article.url.split('/').pop() === currentUrl.split('/').pop())) {
+            if (column.articles.some(article => article.url.split('/').pop().split('?')[0] === currentUrl.split('/').pop().split('?')[0])) {
                 currentColumnIndex = index;
             }
         });
@@ -202,7 +202,7 @@
             articleLink.href = article.url;
             articleLink.textContent = article.title;
             
-            if (article.url.split('/').pop() === currentUrl.split('/').pop()) {
+            if (article.url.split('/').pop().split('?')[0] === currentUrl.split('/').pop().split('?')[0]) {
                 articleItem.classList.add('column-active');
                 activeArticleElement = articleItem;
             }
