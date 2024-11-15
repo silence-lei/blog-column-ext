@@ -60,7 +60,9 @@
             console.error('获取专栏文章失败:', error);
         }
         console.log('allArticles length:', allArticles.length);
-        return allArticles;
+
+        // 返回结果按文章id顺序排序
+        return allArticles.sort((a, b) => a.url.split('/').pop() - b.url.split('/').pop());
     } 
 
     function getColumnInfo() {
@@ -91,6 +93,7 @@
             // 访问专栏地址，获取专栏所有文章列表
             try {
                 const articles = await getColumnArticles(columnId, blogUsername, articleCount);
+
                 return { columnTitle, articles };
             } catch (error) {
                 console.error('Error fetching column articles:', error);
@@ -116,31 +119,6 @@
         }
         
         return null;
-    }
-    
-
-    function parseArticlesFromHTML(html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const ul = doc.querySelector('.column_article_list');
-        if (!ul) return []; // 检查.column_article_list是否存在
-    
-        const lis = Array.from(ul.querySelectorAll('li')); // 转换为数组
-        const result = lis.map(li => {
-            const a = li.querySelector('a');
-            if (!a) return null; // 检查<a>标签是否存在
-    
-            const url = a.getAttribute('href');
-            const title = a.querySelector('.title')?.innerText.trim(); // 使用?.避免错误，使用trim简化去空格和换行
-            if (!title) return null; // 确保标题存在
-    
-            return { url, title };
-        }).filter(article => article !== null); // 过滤掉null值
-    
-        // 如果需要反转结果，请确保有明确的排序逻辑
-        result.reverse();
-    
-        return result;
     }
 
     function buildMenu(columnInfo) {
