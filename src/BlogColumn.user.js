@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CSDN Column Optimization
 // @description  Optimize CSDN columns by adding a side menu with a list of all articles in the current column.
-// @version      1.0
+// @version      1.1
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
@@ -31,43 +31,191 @@
         });
     };
 
+    // 添加缓存相关的常量
+    const CACHE_KEY_PREFIX = 'csdn_column_';
+    const CACHE_EXPIRE_TIME = 24 * 60 * 60 * 1000; // 24小时过期
+
+    // 缓存操作工具函数
+    const CacheUtil = {
+        /**
+         * 获取缓存数据
+         * @param {string} key - 缓存键名
+         * @returns {any|null} - 缓存数据或null
+         */
+        get(key) {
+            const data = localStorage.getItem(CACHE_KEY_PREFIX + key);
+            if (!data) return null;
+            
+            try {
+                const { value, timestamp } = JSON.parse(data);
+                // 检查是否过期
+                if (Date.now() - timestamp > CACHE_EXPIRE_TIME) {
+                    this.remove(key);
+                    return null;
+                }
+                return value;
+            } catch (e) {
+                return null;
+            }
+        },
+
+        /**
+         * 设置缓存数据
+         * @param {string} key - 缓存键名
+         * @param {any} value - 缓存数据
+         */
+        set(key, value) {
+            const data = {
+                value,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(CACHE_KEY_PREFIX + key, JSON.stringify(data));
+        },
+
+        /**
+         * 删除缓存数据
+         * @param {string} key - 缓存键名
+         */
+        remove(key) {
+            localStorage.removeItem(CACHE_KEY_PREFIX + key);
+        }
+    };
+
+    /**
+     * 获取专栏文章列表（带缓存和懒加载）
+     * @param {string} columnId - 专栏ID
+     * @param {string} blogUsername - 博客用户名
+     * @param {number} articleCount - 文章总数
+     * @returns {Promise<Array>} - 文章列表
+     */
     async function getColumnArticles(columnId, blogUsername, articleCount) {
+        // 尝试从缓存获取
+        const cacheKey = `${columnId}_${blogUsername}`;
+        const cachedData = CacheUtil.get(cacheKey);
+        if (cachedData) {
+            console.log('从缓存获取专栏文章');
+            // 确保缓存的数据也是排序的
+            return sortArticles(cachedData);
+        }
+    
         const pageSize = 100; // 每页最大100条
         const totalPages = Math.ceil(articleCount / pageSize);
         let allArticles = [];
         
         try {
-            // 并发请求所有页面
-            const promises = Array.from({ length: totalPages }, (_, i) => {
-                const page = i + 1;
-                return fetch(`https://blog.csdn.net/phoenix/web/v1/column/article/list?columnId=${columnId}&blogUsername=${blogUsername}&page=${page}&pageSize=${pageSize}`)
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.code === 200) {
-                            return data.data.map(article => ({
-                                url: article.url,
-                                title: article.title
-                            }));
-                        }
-                        throw new Error(`获取专栏文章失败: ${data.message}`);
-                    });
-            });
+            // 懒加载：先只加载第一页
+            const firstPageData = await fetchArticlePage(columnId, blogUsername, 1, pageSize);
+            allArticles = firstPageData;
     
-            const results = await Promise.all(promises);
-            allArticles = results.flat();
+            // 如果有更多页，异步加载其余页面
+            if (totalPages > 1) {
+                loadRemainingPages(columnId, blogUsername, totalPages, pageSize).then(articles => {
+                    allArticles = allArticles.concat(articles);
+                    // 排序后再缓存
+                    const sortedArticles = sortArticles(allArticles);
+                    CacheUtil.set(cacheKey, sortedArticles);
+                    // 触发更新UI
+                    updateArticleList(sortedArticles);
+                });
+            } else {
+                // 只有一页时直接排序并缓存
+                const sortedArticles = sortArticles(allArticles);
+                CacheUtil.set(cacheKey, sortedArticles);
+                allArticles = sortedArticles;
+            }
             
         } catch (error) {
             console.error('获取专栏文章失败:', error);
         }
-        console.log('allArticles length:', allArticles.length);
+    
+        // 返回排序后的结果
+        return sortArticles(allArticles);
+    }
+    
+    /**
+     * 按文章ID排序
+     * @param {Array} articles - 文章列表
+     * @returns {Array} - 排序后的文章列表
+     */
+    function sortArticles(articles) {
+        return articles.sort((a, b) => {
+            const aId = parseInt(a.url.split('/').pop());
+            const bId = parseInt(b.url.split('/').pop());
+            return aId - bId;
+        });
+    }
 
-        // 返回结果按文章id顺序排序
-        return allArticles.sort((a, b) => a.url.split('/').pop() - b.url.split('/').pop());
-    } 
+    /**
+     * 获取单页文章数据
+     * @param {string} columnId 专栏ID
+     * @param {string} blogUsername 博客用户名
+     * @param {number} page 页码
+     * @param {number} pageSize 每页文章数量
+     * @return {Promise<Array<{url: string, title: string}>>} 文章列表
+     */
+    async function fetchArticlePage(columnId, blogUsername, page, pageSize) {
+        try {
+            const response = await fetch(
+                `https://blog.csdn.net/phoenix/web/v1/column/article/list?columnId=${columnId}&blogUsername=${blogUsername}&page=${page}&pageSize=${pageSize}`
+            );
+            const data = await response.json();
+            
+            if (data.code === 200) {
+                return data.data.map(article => ({
+                    url: article.url,
+                    title: article.title
+                }));
+            }
+            throw new Error(`获取专栏文章失败: ${data.message}`);
+        } catch (error) {
+            console.error(`获取第${page}页文章失败:`, error);
+            return [];
+        }
+    }
 
+    /**
+     * 异步加载剩余页面
+     * @param {string} columnId 专栏ID
+     * @param {string} blogUsername 博客用户名
+     * @param {number} totalPages 总页数
+     * @param {number} pageSize 每页文章数量
+     * @return {Promise<Array<{url: string, title: string}>>} 文章列表
+     */
+    async function loadRemainingPages(columnId, blogUsername, totalPages, pageSize) {
+        const remainingPages = Array.from(
+            { length: totalPages - 1 }, 
+            (_, i) => fetchArticlePage(columnId, blogUsername, i + 2, pageSize)
+        );
+        
+        try {
+            const results = await Promise.all(remainingPages);
+            return results.flat();
+        } catch (error) {
+            console.error('加载剩余页面失败:', error);
+            return [];
+        }
+    }
+
+    /**
+     * 更新文章列表UI
+     * @param {Object} articles 文章信息
+     */
+    function updateArticleList(articles) {
+        const menu = document.querySelector('.column-menu');
+        if (!menu) return;
+        
+        const currentColumnIndex = menu.querySelector('.column-selector').value;
+        showColumnArticles({ 
+            columnTitle: menu.querySelector('option:checked').textContent, 
+            articles 
+        }, menu);
+    }
+
+    /**
+     * 获取专栏信息
+     * @returns {Promise<{blogUsername: string, columnId: string}>} 专栏信息
+     */
     function getColumnInfo() {
-        // const columnItems = $$('#item-target');
-        // console.log('columnItems: ', columnItems);
         const columnInfoListDom = $$('#blogColumnPayAdvert .column-group-item');
         const promises = Array.from(columnInfoListDom).map(async element => {
             const columnUrl = element.querySelector('.item-target').href;
@@ -106,6 +254,11 @@
         });
     }
 
+    /**
+     * 解析专栏 URL 获取用户名和专栏 ID
+     * @param {string} url 专栏地址
+     * @returns {Promise<{blogUsername: string, columnId: string}>} 专栏信息
+     */
     function parseColumnUrl(url) {
         // 使用正则表达式匹配 URL 中的用户名和专栏 ID
         const regex = /blog\.csdn\.net\/([^\/]+)\/category_(\d+)\.html/;
@@ -121,6 +274,11 @@
         return null;
     }
 
+    /**
+     * 构建专栏目录菜单
+     * @param {Object} columnInfo 专栏目录信息 
+     * @returns {Object} 菜单元素
+     */
     function buildMenu(columnInfo) {
         const currentUrl = window.location.href;
         const menu = document.createElement('div');
@@ -160,6 +318,11 @@
         return menu;
     }
 
+    /**
+     * 展示专栏文章列表
+     * @param {Object} column 专栏信息
+     * @param {Object} menu 菜单元素
+     */
     function showColumnArticles(column, menu) {
         const currentUrl = window.location.href;
     
@@ -203,6 +366,10 @@
         }
     }
 
+    /**
+     * 添加自定义菜单到侧边栏
+     * @param {Object} menu 菜单元素
+     */
     function addMenuToSidebar(menu) {
         const sidebar = document.createElement('div');
         sidebar.id = 'custom-sidebar';
@@ -274,6 +441,10 @@
         adjustMainContentStyle(true);
     }
 
+    /**
+     * 切换侧边栏的显示状态
+     * @param {boolean} show 是否显示
+     */
     function toggleSidebar(show) {
         const sidebar = document.querySelector('#custom-sidebar');
         const expandBtn = document.querySelector('#sidebar-expand-btn');
@@ -289,6 +460,10 @@
         }
     }
 
+    /**
+     * 调整主内容区域的样式
+     * @param {boolean} isExpanded 是否展开
+     */
     function adjustMainContentStyle(isExpanded) {
         const mainContent = document.querySelector('.blog-content-box');
         if (mainContent) {
@@ -317,6 +492,10 @@
         }
     }
 
+    /**
+     * 添加点击事件到菜单
+     * @param {Object} menu 菜单对象
+     */
     function addClickEventToMenu(menu) {
         const articleLinks = menu.querySelectorAll('.article-list a');
         articleLinks.forEach(link => {
@@ -329,228 +508,228 @@
         });
     }
 
-// 更新样式
-const customStyle = `
-    #custom-sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        width: 250px;
-        height: 100vh;
-        background-color: #fff;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        z-index: 999;
-        overflow-y: auto;
-        padding: 0;
-        border-right: 1px solid #eee;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-        transition: transform 0.3s ease;
-    }
-
-    .sidebar-title {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 15px;
-        font-size: 16px;
-        font-weight: bold;
-        border-bottom: 1px solid #eee;
-        background-color: #f8f9fa;
-    }
-
-    .title-buttons {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-    }
-
-    .sidebar-btn {
-        background: none;
-        border: none;
-        color: #666;
-        font-size: 16px;
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 4px;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-    }
-
-    .sidebar-btn:hover {
-        background-color: rgba(0, 0, 0, 0.05);
-        color: #1890ff;
-    }
-
-    .locate-btn {
-        font-size: 14px;
-    }
-
-    .title-content {
-        flex: 1;
-    }
-
-    .collapse-btn {
-        //background: none;
-        //border: none;
-        //color: #666;
-        font-size: 18px;
-        //cursor: pointer;
-        //padding: 0 5px;
-        //transition: color 0.2s;
-    }
-
-     /* 添加按钮激活状态样式 */
-    .sidebar-btn:active {
-        transform: scale(0.95);
-    }
-
-    .collapse-btn:hover {
-        color: #1890ff;
-    }
-
-    #sidebar-expand-btn {
-        position: fixed;
-        left: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 20px;
-        height: 50px;
-        background-color: #fff;
-        box-shadow: 2px 0 4px rgba(0,0,0,0.1);
-        cursor: pointer;
-        z-index: 999;
-        border-radius: 0 4px 4px 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background-color 0.2s;
-        text-align: center;
-        line-height: 50px;
-    }
-
-    #sidebar-expand-btn:hover {
-        background-color: #f0f0f0;
-    }
-
-    #sidebar-expand-btn::after {
-        content: '›';
-        font-size: 20px;
-        color: #666;
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        line-height: 1;
-    }
-
-    .column-selector {
-        width: 90%;
-        margin: 10px auto;
-        display: block;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        background-color: #fff;
-    }
-
-    .column-selector:hover {
-        border-color: #40a9ff;
-    }
-
-    .column-selector:focus {
-        outline: none;
-        border-color: #1890ff;
-        box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
-    }
-
-    .article-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
-    .article-list li {
-        padding: 0;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    .article-list li a {
-        display: block;
-        padding: 12px 15px;
-        color: #333;
-        text-decoration: none;
-        font-size: 14px;
-        line-height: 1.5;
-        transition: all 0.2s;
-    }
-
-    .article-list li:hover {
-        background-color: #f8f9fa;
-    }
-
-    .article-list li:hover a {
-        color: #1890ff;
-    }
-
-    .column-active {
-        background-color: #e6f7ff;
-    }
-
-    .column-active a {
-        color: #1890ff !important;
-        font-weight: 500;
-    }
-
-    /* 滚动条样式 */
-    #custom-sidebar::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    #custom-sidebar::-webkit-scrollbar-track {
-        background: #f1f1f1;
-    }
-
-    #custom-sidebar::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 3px;
-    }
-
-    #custom-sidebar::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
-
-    /* 响应式设计 */
-    @media (max-width: 1200px) {
+    // 更新样式
+    const customStyle = `
         #custom-sidebar {
-            width: 200px;
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 250px;
+            height: 100vh;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 999;
+            overflow-y: auto;
+            padding: 0;
+            border-right: 1px solid #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            transition: transform 0.3s ease;
         }
-        
-        .blog-content-box {
-            margin-left: 200px !important;
-        }
-        
-        #sidebar-expand-btn {
-            width: 16px;
-        }
-        
-        .column-selector {
-            width: 85%;
-        }
-    }
 
-    /* 动画过渡效果 */
-    .blog-content-box,
-    #toolbarBox,
-    #toolBarBox,
-    #pcCommentBox {
-        transition: margin-left 0.3s ease;
-    }
-`;
+        .sidebar-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            font-size: 16px;
+            font-weight: bold;
+            border-bottom: 1px solid #eee;
+            background-color: #f8f9fa;
+        }
+
+        .title-buttons {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .sidebar-btn {
+            background: none;
+            border: none;
+            color: #666;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+        }
+
+        .sidebar-btn:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+            color: #1890ff;
+        }
+
+        .locate-btn {
+            font-size: 14px;
+        }
+
+        .title-content {
+            flex: 1;
+        }
+
+        .collapse-btn {
+            //background: none;
+            //border: none;
+            //color: #666;
+            font-size: 18px;
+            //cursor: pointer;
+            //padding: 0 5px;
+            //transition: color 0.2s;
+        }
+
+        /* 添加按钮激活状态样式 */
+        .sidebar-btn:active {
+            transform: scale(0.95);
+        }
+
+        .collapse-btn:hover {
+            color: #1890ff;
+        }
+
+        #sidebar-expand-btn {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 50px;
+            background-color: #fff;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+            cursor: pointer;
+            z-index: 999;
+            border-radius: 0 4px 4px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+            text-align: center;
+            line-height: 50px;
+        }
+
+        #sidebar-expand-btn:hover {
+            background-color: #f0f0f0;
+        }
+
+        #sidebar-expand-btn::after {
+            content: '›';
+            font-size: 20px;
+            color: #666;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            line-height: 1;
+        }
+
+        .column-selector {
+            width: 90%;
+            margin: 10px auto;
+            display: block;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+
+        .column-selector:hover {
+            border-color: #40a9ff;
+        }
+
+        .column-selector:focus {
+            outline: none;
+            border-color: #1890ff;
+            box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
+        }
+
+        .article-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .article-list li {
+            padding: 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .article-list li a {
+            display: block;
+            padding: 12px 15px;
+            color: #333;
+            text-decoration: none;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: all 0.2s;
+        }
+
+        .article-list li:hover {
+            background-color: #f8f9fa;
+        }
+
+        .article-list li:hover a {
+            color: #1890ff;
+        }
+
+        .column-active {
+            background-color: #e6f7ff;
+        }
+
+        .column-active a {
+            color: #1890ff !important;
+            font-weight: 500;
+        }
+
+        /* 滚动条样式 */
+        #custom-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #custom-sidebar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        #custom-sidebar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        #custom-sidebar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            #custom-sidebar {
+                width: 200px;
+            }
+            
+            .blog-content-box {
+                margin-left: 200px !important;
+            }
+            
+            #sidebar-expand-btn {
+                width: 16px;
+            }
+            
+            .column-selector {
+                width: 85%;
+            }
+        }
+
+        /* 动画过渡效果 */
+        .blog-content-box,
+        #toolbarBox,
+        #toolBarBox,
+        #pcCommentBox {
+            transition: margin-left 0.3s ease;
+        }
+    `;
 
     // 如果支持GM_addStyle，则使用它来添加样式
     if (typeof GM_addStyle !== 'undefined') {
