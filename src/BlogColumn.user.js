@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         CSDN Column Optimization
-// @description  Optimize CSDN columns by adding a side menu with a list of all articles in the current column.
+// @name         CSDN 专栏优化脚本 📚
+// @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
 // @version      1.1
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
@@ -16,7 +16,7 @@
     const $$ = (Selector, el) => (el || document).querySelectorAll(Selector);
 
     window.onload = function () {
-        console.log('CSDN Column Optimization loaded.');
+        console.log('CSDN 专栏优化脚本开始加载');
 
         // 步骤 1: 获取当前文章所属的专栏信息
         getColumnInfo().then(columnInfo => {
@@ -227,7 +227,7 @@
                     articleCount = info.innerText.replace(' 篇文章', '');
                 }
             })
-            console.log('articleCount: ', articleCount);
+            console.log('文章数量: ', articleCount);
             // 从columnUrl获取blogUserName和columnId
             const urlInfo = parseColumnUrl(columnUrl);
             if (!urlInfo) {
@@ -511,6 +511,7 @@
     // 更新样式
     const customStyle = `
         #custom-sidebar {
+            all: unset;
             position: fixed;
             left: 0;
             top: 0;
@@ -651,21 +652,24 @@
             list-style: none;
             padding: 0;
             margin: 0;
+            background-color: #fff;
         }
 
         .article-list li {
             padding: 0;
             border-bottom: 1px solid #f0f0f0;
+            background-color: #fff;
         }
 
         .article-list li a {
             display: block;
             padding: 12px 15px;
-            color: #333;
+            color: #000;
             text-decoration: none;
             font-size: 14px;
             line-height: 1.5;
             transition: all 0.2s;
+            background-color: #fff;
         }
 
         .article-list li:hover {
