@@ -17,18 +17,7 @@
 
     window.onload = function () {
         console.log('CSDN 专栏优化脚本开始加载');
-
-        // 步骤 1: 获取当前文章所属的专栏信息
-        getColumnInfo().then(columnInfo => {
-            // 步骤 2: 构建专栏和文章的目录结构
-            const menu = buildMenu(columnInfo);
-
-            // 步骤 3: 将目录添加到边侧
-            addMenuToSidebar(menu);
-
-            // 步骤 4: 实现点击切换文章
-            addClickEventToMenu(menu);
-        });
+        initSidebar();
     };
 
     // 添加缓存相关的常量
@@ -367,10 +356,44 @@
     }
 
     /**
-     * 添加自定义菜单到侧边栏
-     * @param {Object} menu 菜单元素
+     * 初始化侧边栏
      */
-    function addMenuToSidebar(menu) {
+    async function initSidebar() {
+        try {
+            // 获取专栏信息
+            const columnInfo = await getColumnInfo();
+            const article = document.querySelector('.blog-content-box');
+            const headers = article?.querySelectorAll('h1, h2, h3, h4, h5, h6');
+            
+            // 如果既没有专栏信息也没有文章目录，则不添加侧边栏
+            if ((!columnInfo || columnInfo.length === 0) && (!headers || headers.length === 0)) {
+                return;
+            }
+
+            const sidebar = document.createElement('div');
+            sidebar.id = 'custom-sidebar';
+            sidebar.classList.add('column-menu-sidebar');
+
+            if (columnInfo && columnInfo.length > 0) {
+                // 有专栏信息时显示专栏目录
+                const menu = buildMenu(columnInfo);
+                addMenuToSidebar(menu, false, true);
+            } else {
+                // 没有专栏信息但有文章目录时直接显示文章目录
+                addMenuToSidebar(null, true, false);
+            }
+        } catch (error) {
+            console.error('初始化侧边栏失败:', error);
+        }
+    }
+
+    /**
+     * 添加侧边栏到页面
+     * @param {HTMLElement} menu - 菜单元素
+     * @param {boolean} showTocDirectly - 是否直接显示文章目录
+     * @param {boolean} hasColumnMenu - 是否有专栏目录
+     */
+    function addMenuToSidebar(menu, showTocDirectly = false, hasColumnMenu = true) {
         const sidebar = document.createElement('div');
         sidebar.id = 'custom-sidebar';
         sidebar.classList.add('column-menu-sidebar');
@@ -382,53 +405,56 @@
         // 添加标题文本容器
         const titleContent = document.createElement('div');
         titleContent.classList.add('title-content');
-        titleContent.textContent = '专栏文章';
+        titleContent.textContent = showTocDirectly ? '文章目录' : '专栏文章';
         
         // 添加按钮容器
         const buttonContainer = document.createElement('div');
         buttonContainer.classList.add('title-buttons');
+
+        // 添加目录切换按钮
+        if (hasColumnMenu) {
+            const toggleTocBtn = document.createElement('button');
+            toggleTocBtn.classList.add('sidebar-btn', 'toggle-toc-btn');
+            toggleTocBtn.innerHTML = showTocDirectly ? '&#x1F4DA;' : '&#x1F4D1;';
+            toggleTocBtn.title = '切换文章目录';
+            toggleTocBtn.onclick = () => toggleTocMode(showTocDirectly);
+            buttonContainer.appendChild(toggleTocBtn);
+        }
         
-        // 添加定位按钮
-        const locateBtn = document.createElement('button');
-        locateBtn.classList.add('sidebar-btn', 'locate-btn');
-        locateBtn.innerHTML = '&#x1F50D;'; // 放大镜图标
-        locateBtn.title = '定位当前文章';
-        locateBtn.onclick = () => {
-            const activeArticle = sidebar.querySelector('.column-active');
-            if (activeArticle) {
-                activeArticle.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'center'
-                });
-            }
-        };
+        // 添加定位按钮（仅在专栏模式下显示）
+        if (!showTocDirectly && hasColumnMenu) {
+            const locateBtn = document.createElement('button');
+            locateBtn.classList.add('sidebar-btn', 'locate-btn');
+            locateBtn.innerHTML = '&#x1F50D;';
+            locateBtn.title = '定位当前文章';
+            locateBtn.onclick = () => {
+                const activeArticle = sidebar.querySelector('.column-active');
+                if (activeArticle) {
+                    activeArticle.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            };
+            buttonContainer.appendChild(locateBtn);
+        }
         
         // 添加收起按钮
         const collapseBtn = document.createElement('button');
         collapseBtn.classList.add('sidebar-btn', 'collapse-btn');
-        collapseBtn.innerHTML = '&times;'; // × 符号
+        collapseBtn.innerHTML = '&times;';
         collapseBtn.title = '收起侧边栏';
-        
-        // 组装按钮容器
-        buttonContainer.appendChild(locateBtn);
+        collapseBtn.onclick = () => toggleSidebar(false);
         buttonContainer.appendChild(collapseBtn);
         
         // 组装标题栏
         titleBar.appendChild(titleContent);
         titleBar.appendChild(buttonContainer);
         sidebar.appendChild(titleBar);
-        sidebar.appendChild(menu);
         
-        // 添加收起后的展开按钮
-        const expandBtn = document.createElement('div');
-        expandBtn.id = 'sidebar-expand-btn';
-        expandBtn.title = '展开侧边栏';
-        expandBtn.style.display = 'none';
-        document.body.appendChild(expandBtn);
-        
-        // 添加收起/展开事件
-        collapseBtn.addEventListener('click', () => toggleSidebar(false));
-        expandBtn.addEventListener('click', () => toggleSidebar(true));
+        if (menu && !showTocDirectly) {
+            sidebar.appendChild(menu);
+        }
         
         // 插入侧边栏到页面
         const blogContentBox = document.querySelector('.blog-content-box');
@@ -439,6 +465,11 @@
         }
         
         adjustMainContentStyle(true);
+        
+        // 如果需要直接显示文章目录
+        if (showTocDirectly) {
+            generateToc(sidebar);
+        }
     }
 
     /**
@@ -447,17 +478,195 @@
      */
     function toggleSidebar(show) {
         const sidebar = document.querySelector('#custom-sidebar');
-        const expandBtn = document.querySelector('#sidebar-expand-btn');
+        let expandBtn = document.querySelector('#sidebar-expand-btn');
         
         if (show) {
             sidebar.style.transform = 'translateX(0)';
-            expandBtn.style.display = 'none';
+            if (expandBtn) {
+                expandBtn.style.display = 'none';
+            }
             adjustMainContentStyle(true);
         } else {
             sidebar.style.transform = 'translateX(-250px)';
+            
+            // 如果展开按钮不存在，则创建
+            if (!expandBtn) {
+                expandBtn = document.createElement('div');
+                expandBtn.id = 'sidebar-expand-btn';
+                expandBtn.onclick = () => toggleSidebar(true);
+                document.body.appendChild(expandBtn);
+            }
             expandBtn.style.display = 'block';
             adjustMainContentStyle(false);
         }
+    }
+
+    /**
+     * 切换目录模式
+     * @param {boolean} [isInTocMode=false] - 当前是否在目录模式
+     */
+    function toggleTocMode(isInTocMode = false) {
+        const sidebar = document.querySelector('#custom-sidebar');
+        const menu = sidebar.querySelector('.column-menu');
+        const existingToc = sidebar.querySelector('.article-toc');
+        const titleContent = sidebar.querySelector('.title-content');
+        const toggleBtn = sidebar.querySelector('.toggle-toc-btn');
+
+        if (existingToc) {
+            // 切换回专栏模式
+            existingToc.remove(); // 移除而不是隐藏
+            if (menu) menu.style.display = 'block';
+            titleContent.textContent = '专栏文章';
+            toggleBtn.innerHTML = '&#x1F4D1;';
+        } else {
+            // 切换到目录模式
+            if (menu) menu.style.display = 'none';
+            titleContent.textContent = '文章目录';
+            toggleBtn.innerHTML = '&#x1F4DA;';
+            generateToc(sidebar);
+        }
+    }
+
+    /**
+     * 生成文章目录
+     * @param {HTMLElement} sidebar - 侧边栏元素
+     */
+    function generateToc(sidebar) {
+        const article = document.querySelector('.blog-content-box');
+        if (!article) return;
+
+        const toc = document.createElement('div');
+        toc.classList.add('article-toc');
+
+        // 获取所有标题
+        const headers = article.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        const tocList = document.createElement('ul');
+        tocList.classList.add('toc-list');
+
+        // 创建目录树结构
+        const headerTree = buildHeaderTree(headers);
+        renderHeaderTree(headerTree, tocList);
+
+        toc.appendChild(tocList);
+        sidebar.appendChild(toc);
+
+        // 添加目录滚动监听
+        addTocScrollSpy(headers, tocList);
+    }
+
+    /**
+     * 构建标题树结构
+     * @param {NodeList} headers - 标题元素列表
+     * @returns {Array} 标题树结构
+     */
+    function buildHeaderTree(headers) {
+        const tree = [];
+        const stack = [{ level: 0, children: tree }];
+
+        headers.forEach((header, index) => {
+            const level = parseInt(header.tagName.charAt(1));
+            const node = {
+                id: header.id || `toc-heading-${index}`,
+                title: header.textContent,
+                level,
+                children: []
+            };
+
+            if (!header.id) {
+                header.id = node.id;
+            }
+
+            while (stack[stack.length - 1].level >= level) {
+                stack.pop();
+            }
+
+            stack[stack.length - 1].children.push(node);
+            stack.push({ level, children: node.children });
+        });
+
+        return tree;
+    }
+
+    /**
+     * 渲染标题树
+     * @param {Array} tree - 标题树结构
+     * @param {HTMLElement} parent - 父容器元素
+     */
+    function renderHeaderTree(tree, parent) {
+        tree.forEach(node => {
+            const item = document.createElement('li');
+            item.classList.add(`toc-level-${node.level}`);
+            
+            const titleContainer = document.createElement('div');
+            titleContainer.classList.add('toc-title-container');
+            
+            // 只有当有子节点时才添加展开/折叠按钮
+            if (node.children.length > 0) {
+                const toggleBtn = document.createElement('span');
+                toggleBtn.classList.add('toc-toggle');
+                toggleBtn.innerHTML = '▼';
+                toggleBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const subList = item.querySelector('ul');
+                    if (subList) {
+                        const isExpanded = subList.style.display !== 'none';
+                        subList.style.display = isExpanded ? 'none' : 'block';
+                        toggleBtn.innerHTML = isExpanded ? '▶' : '▼';
+                    }
+                };
+                titleContainer.appendChild(toggleBtn);
+            } else {
+                // 添加一个空的占位符，保持对齐
+                const spacer = document.createElement('span');
+                spacer.classList.add('toc-toggle-spacer');
+                titleContainer.appendChild(spacer);
+            }
+            
+            const link = document.createElement('a');
+            link.href = `#${node.id}`;
+            link.textContent = node.title;
+            link.onclick = (e) => {
+                e.preventDefault();
+                document.getElementById(node.id).scrollIntoView({ behavior: 'smooth' });
+            };
+            
+            titleContainer.appendChild(link);
+            item.appendChild(titleContainer);
+            
+            if (node.children.length > 0) {
+                const subList = document.createElement('ul');
+                renderHeaderTree(node.children, subList);
+                item.appendChild(subList);
+            }
+            
+            parent.appendChild(item);
+        });
+    }
+
+    /**
+     * 添加目录滚动监听
+     * @param {HTMLElement} headers 
+     * @param {HTMLElement} tocList 
+     */
+    function addTocScrollSpy(headers, tocList) {
+        const tocLinks = tocList.querySelectorAll('a');
+        
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const id = entry.target.id;
+                const tocLink = tocList.querySelector(`a[href="#${id}"]`);
+                
+                if (entry.isIntersecting) {
+                    tocLinks.forEach(link => link.classList.remove('toc-active'));
+                    tocLink?.classList.add('toc-active');
+                }
+            });
+        }, {
+            rootMargin: '-20% 0px -80% 0px'
+        });
+    
+        headers.forEach(header => observer.observe(header));
     }
 
     /**
@@ -510,6 +719,7 @@
 
     // 更新样式
     const customStyle = `
+        /* 侧边栏基础样式 */
         #custom-sidebar {
             all: unset;
             position: fixed;
@@ -527,6 +737,7 @@
             transition: transform 0.3s ease;
         }
 
+        /* 标题栏样式组 */
         .sidebar-title {
             display: flex;
             justify-content: space-between;
@@ -544,6 +755,11 @@
             align-items: center;
         }
 
+        .title-content {
+            flex: 1;
+        }
+
+        /* 按钮通用样式 */
         .sidebar-btn {
             background: none;
             border: none;
@@ -565,33 +781,16 @@
             color: #1890ff;
         }
 
-        .locate-btn {
-            font-size: 14px;
-        }
-
-        .title-content {
-            flex: 1;
-        }
-
-        .collapse-btn {
-            //background: none;
-            //border: none;
-            //color: #666;
-            font-size: 18px;
-            //cursor: pointer;
-            //padding: 0 5px;
-            //transition: color 0.2s;
-        }
-
-        /* 添加按钮激活状态样式 */
         .sidebar-btn:active {
             transform: scale(0.95);
         }
 
-        .collapse-btn:hover {
-            color: #1890ff;
-        }
+        /* 特定按钮样式 */
+        .locate-btn { font-size: 14px; }
+        .collapse-btn { font-size: 18px; }
+        .toggle-toc-btn { font-size: 16px; }
 
+        /* 展开按钮样式 */
         #sidebar-expand-btn {
             position: fixed;
             left: 0;
@@ -627,6 +826,7 @@
             line-height: 1;
         }
 
+        /* 专栏选择器样式 */
         .column-selector {
             width: 90%;
             margin: 10px auto;
@@ -648,6 +848,7 @@
             box-shadow: 0 0 0 2px rgba(24,144,255,0.2);
         }
 
+        /* 文章列表样式 */
         .article-list {
             list-style: none;
             padding: 0;
@@ -689,6 +890,87 @@
             font-weight: 500;
         }
 
+        /* 目录树样式 */
+        .article-toc {
+            padding: 10px 0;
+            overflow-y: auto;
+            height: calc(100vh - 50px);
+        }
+
+        .toc-list, .toc-list ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .toc-list > li {
+            padding-left: 0;
+        }
+
+        .toc-list ul > li {
+            padding-left: 20px;
+        }
+
+        .toc-title-container {
+            display: flex;
+            align-items: center;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toc-title-container:hover {
+            background-color: #f8f9fa;
+        }
+
+        .toc-toggle, .toc-toggle-spacer {
+            width: 20px;
+            height: 20px;
+            line-height: 20px;
+            text-align: center;
+            margin-right: 5px;
+        }
+
+        .toc-toggle:hover {
+            color: #1890ff;
+        }
+
+        /* 目录链接样式 */
+        .toc-list a {
+            flex: 1;
+            color: #333;
+            text-decoration: none;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: all 0.2s;
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .toc-list a:hover {
+            color: #1890ff;
+        }
+
+        /* 目录级别样式 */
+        .toc-level-1 > .toc-title-container { font-size: 16px; font-weight: 500; }
+        .toc-level-2 > .toc-title-container { font-size: 15px; }
+        .toc-level-3 > .toc-title-container { font-size: 14px; }
+        .toc-level-4 > .toc-title-container,
+        .toc-level-5 > .toc-title-container,
+        .toc-level-6 > .toc-title-container { font-size: 13px; }
+
+        /* 激活状态样式 */
+        .toc-active {
+            color: #1890ff !important;
+            font-weight: 500;
+        }
+
+        .toc-active > .toc-title-container {
+            background-color: #e6f7ff;
+        }
+
         /* 滚动条样式 */
         #custom-sidebar::-webkit-scrollbar {
             width: 6px;
@@ -707,7 +989,7 @@
             background: #555;
         }
 
-        /* 响应式设计 */
+        /* 响应式样式 */
         @media (max-width: 1200px) {
             #custom-sidebar {
                 width: 200px;
@@ -726,7 +1008,7 @@
             }
         }
 
-        /* 动画过渡效果 */
+        /* 过渡动画 */
         .blog-content-box,
         #toolbarBox,
         #toolBarBox,
