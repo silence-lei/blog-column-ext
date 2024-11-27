@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CSDN 专栏优化脚本 📚
 // @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
-// @version      1.1
+// @version      1.1.0
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
