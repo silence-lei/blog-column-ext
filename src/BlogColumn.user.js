@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         CSDN 专栏优化脚本 📚
 // @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
-// @version      1.1.0
+// @version      1.3.0
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
 // @grant        GM_addStyle
 // @run-at       document-start
+// @license      MIT
 // ==/UserScript==
 
 (function () {
@@ -451,6 +452,29 @@
         titleBar.appendChild(titleContent);
         titleBar.appendChild(buttonContainer);
         sidebar.appendChild(titleBar);
+
+        // 添加返回顶部按钮
+        const backToTopBtn = document.createElement('button');
+        backToTopBtn.classList.add('back-to-top');
+        backToTopBtn.title = '返回顶部';
+        
+        // 监听滚动事件
+        sidebar.addEventListener('scroll', () => {
+            if (sidebar.scrollTop > 300) {
+                backToTopBtn.style.display = 'flex';
+            } else {
+                backToTopBtn.style.display = 'none';
+            }
+        });
+        
+        backToTopBtn.onclick = () => {
+            sidebar.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        };
+        
+        sidebar.appendChild(backToTopBtn);
         
         if (menu && !showTocDirectly) {
             sidebar.appendChild(menu);
@@ -1014,6 +1038,43 @@
         #toolBarBox,
         #pcCommentBox {
             transition: margin-left 0.3s ease;
+        }
+
+        /* 返回顶部按钮样式 */
+        .back-to-top {
+            position: fixed;
+            top: 10%;
+            left: 190px;
+            width: 40px;
+            height: 40px;
+            background-color: #fff;
+            border: 1px solid #eee;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .back-to-top:hover {
+            background-color: #f8f9fa;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        .back-to-top::after {
+            content: '↑';
+            font-size: 20px;
+            color: #1890ff;
+            font-weight: bold;
+        }
+
+        .column-menu {
+            position: relative;
+            height: 100%;
         }
     `;
 
