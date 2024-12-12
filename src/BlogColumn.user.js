@@ -1,17 +1,31 @@
 // ==UserScript==
 // @name         CSDN 专栏优化脚本 📚
 // @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
-// @version      1.3.0
+// @version      1.4.0
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
 // @grant        GM_addStyle
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @run-at       document-start
 // @license      MIT
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    const CONFIG = {
+        cleanParams: GM_getValue('cleanParams', true)
+    };
+
+    // 在脚本开始时立即执行清理
+    cleanAnalyticsParams();
+
+    // 监听URL变化,处理动态加载的情况
+    window.addEventListener('popstate', cleanAnalyticsParams);
+    window.addEventListener('pushState', cleanAnalyticsParams);
+    window.addEventListener('replaceState', cleanAnalyticsParams);
 
     const $ = (Selector, el) => (el || document).querySelector(Selector);
     const $$ = (Selector, el) => (el || document).querySelectorAll(Selector);
@@ -440,6 +454,14 @@
             buttonContainer.appendChild(locateBtn);
         }
         
+        // 添加配置按钮
+        const configBtn = document.createElement('button');
+        configBtn.classList.add('sidebar-btn', 'config-btn');
+        configBtn.innerHTML = '&#x2699';
+        configBtn.title = '设置';
+        configBtn.onclick = showConfig;
+        buttonContainer.appendChild(configBtn);
+
         // 添加收起按钮
         const collapseBtn = document.createElement('button');
         collapseBtn.classList.add('sidebar-btn', 'collapse-btn');
@@ -548,6 +570,60 @@
             titleContent.textContent = '文章目录';
             toggleBtn.innerHTML = '&#x1F4DA;';
             generateToc(sidebar);
+        }
+    }
+
+    /**
+     * 显示配置面板
+     */
+    function showConfig() {
+        const configPanel = document.createElement('div');
+        configPanel.classList.add('config-panel');
+
+        const cleanParamsOption = document.createElement('label');
+        cleanParamsOption.innerHTML = `
+            <input type="checkbox" ${CONFIG.cleanParams ? 'checked' : ''}>
+            去除链接中的分析参数
+        `;
+
+        cleanParamsOption.querySelector('input').onchange = (e) => {
+            CONFIG.cleanParams = e.target.checked;
+            GM_setValue('cleanParams', CONFIG.cleanParams);
+        };
+
+        configPanel.appendChild(cleanParamsOption);
+
+        // 添加关闭按钮
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '关闭';
+        closeBtn.onclick = () => {
+            configPanel.remove();
+        };
+        configPanel.appendChild(closeBtn);
+
+        document.body.appendChild(configPanel);
+        
+    }
+
+    /**
+     * 去除链接中的分析参数
+     */
+    function cleanAnalyticsParams() {
+        if (!CONFIG.cleanParams) return ;
+        
+        const paramsToRemove = ['spm', 'utm_source', 'utm_medium', 'utm_campaign', 'depth_1-utm_source', 'depth_1-utm_medium', 'depth_1-utm_campaign'];
+        const url = new URL(window.location.href);
+        let changed = false;
+        
+        paramsToRemove.forEach(param => {
+            if (url.searchParams.has(param)) {
+                url.searchParams.delete(param);
+                changed = true;
+            }
+        });
+        
+        if (changed) {
+            window.history.replaceState({}, '', url.toString());
         }
     }
 
@@ -1075,6 +1151,38 @@
         .column-menu {
             position: relative;
             height: 100%;
+        }
+
+        .config-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+        
+        .config-panel label {
+            display: block;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        
+        .config-panel button {
+            margin-top: 15px;
+            padding: 5px 15px;
+            background: #1890ff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .config-btn {
+            font-size: 16px;
         }
     `;
 
