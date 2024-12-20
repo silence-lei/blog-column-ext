@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CSDN 专栏优化脚本 📚
 // @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
-// @version      1.4.0
+// @version      1.4.1
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
@@ -830,6 +830,7 @@
             background-color: #fff;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             z-index: 999;
+            overflow-x: auto;
             overflow-y: auto;
             padding: 0;
             border-right: 1px solid #eee;
@@ -971,6 +972,8 @@
             line-height: 1.5;
             transition: all 0.2s;
             background-color: #fff;
+            white-space: normal;
+            word-break: break-all;
         }
 
         .article-list li:hover {
@@ -1009,6 +1012,7 @@
 
         .toc-list ul > li {
             padding-left: 20px;
+            background-color: #fff !important;
         }
 
         .toc-title-container {
@@ -1017,6 +1021,7 @@
             padding: 8px 15px;
             cursor: pointer;
             transition: all 0.2s;
+            background-color: #fff !important;
         }
 
         .toc-title-container:hover {
@@ -1046,7 +1051,8 @@
             display: block;
             overflow: hidden;
             text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: normal;
+            word-break: break-all;
         }
 
         .toc-list a:hover {
