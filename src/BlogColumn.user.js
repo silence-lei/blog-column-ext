@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CSDN 专栏优化脚本 📚
 // @description  通过在 CSDN 专栏页面添加一个侧边栏菜单，列出当前专栏的所有文章，提升阅读体验 🌟
-// @version      1.4.1
+// @version      1.4.2
 // @author       Silence
 // @match        *://blog.csdn.net/*/article/*
 // @match        *://*.blog.csdn.net/article/*
@@ -436,13 +436,23 @@
             buttonContainer.appendChild(toggleTocBtn);
         }
         
-        // 添加定位按钮（仅在专栏模式下显示）
-        if (!showTocDirectly && hasColumnMenu) {
-            const locateBtn = document.createElement('button');
-            locateBtn.classList.add('sidebar-btn', 'locate-btn');
-            locateBtn.innerHTML = '&#x1F50D;';
-            locateBtn.title = '定位当前文章';
-            locateBtn.onclick = () => {
+        // 添加定位按钮（在两种模式下都显示）
+        const locateBtn = document.createElement('button');
+        locateBtn.classList.add('sidebar-btn', 'locate-btn');
+        locateBtn.innerHTML = '&#x1F50D;';
+        locateBtn.title = '定位当前位置';
+        locateBtn.onclick = () => {
+            if (showTocDirectly || sidebar.querySelector('.article-toc')) {
+                // 目录模式下定位到当前标题
+                const activeTocItem = sidebar.querySelector('.toc-active');
+                if (activeTocItem) {
+                    activeTocItem.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            } else {
+                // 专栏模式下定位到当前文章
                 const activeArticle = sidebar.querySelector('.column-active');
                 if (activeArticle) {
                     activeArticle.scrollIntoView({
@@ -450,9 +460,9 @@
                         block: 'center'
                     });
                 }
-            };
-            buttonContainer.appendChild(locateBtn);
-        }
+            }
+        };
+        buttonContainer.appendChild(locateBtn);
         
         // 添加配置按钮
         const configBtn = document.createElement('button');
@@ -557,19 +567,46 @@
         const existingToc = sidebar.querySelector('.article-toc');
         const titleContent = sidebar.querySelector('.title-content');
         const toggleBtn = sidebar.querySelector('.toggle-toc-btn');
+        const locateBtn = sidebar.querySelector('.locate-btn');
 
         if (existingToc) {
             // 切换回专栏模式
-            existingToc.remove(); // 移除而不是隐藏
+            existingToc.remove();
             if (menu) menu.style.display = 'block';
             titleContent.textContent = '专栏文章';
             toggleBtn.innerHTML = '&#x1F4D1;';
+            
+            // 更新定位按钮功能为专栏模式
+            if (locateBtn) {
+                locateBtn.onclick = () => {
+                    const activeArticle = sidebar.querySelector('.column-active');
+                    if (activeArticle) {
+                        activeArticle.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center'
+                        });
+                    }
+                };
+            }
         } else {
             // 切换到目录模式
             if (menu) menu.style.display = 'none';
             titleContent.textContent = '文章目录';
             toggleBtn.innerHTML = '&#x1F4DA;';
             generateToc(sidebar);
+            
+            // 更新定位按钮功能为目录模式
+            if (locateBtn) {
+                locateBtn.onclick = () => {
+                    const activeTocItem = sidebar.querySelector('.toc-active');
+                    if (activeTocItem) {
+                        activeTocItem.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'center'
+                        });
+                    }
+                };
+            }
         }
     }
 
